@@ -58,7 +58,7 @@ UKF::UKF() {
   P_ << std_radr_, 0, 0, 0, 0,
         0, std_radr_, 0, 0, 0,
         0, 0, 2*std_radr_, 0, 0, 
-        0, 0, 0, 2*M_PI, 0,
+        0, 0, 0, 4*M_PI, 0,
         0, 0, 0, 0, 5*M_PI*M_PI;
 
   //initialize weights
