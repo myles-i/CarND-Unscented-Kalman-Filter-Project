@@ -8,14 +8,20 @@
 #include <fstream>
 #include "tools.h"
 
+
 using Eigen::MatrixXd;
 using Eigen::VectorXd;
 
 class UKF {
 public:
-
+  // tools
+  Tools tools;
+  // previous timestamp
+  long previous_timestamp_;
   ///* initially set to false, set to true in first call of ProcessMeasurement
-  bool is_initialized_;
+  bool is_x_initialized_;
+  bool is_psi_initialized_;
+  bool is_psidot_initialized_;
 
   ///* if this is false, laser measurements will be ignored (except for init)
   bool use_laser_;
@@ -58,12 +64,6 @@ public:
 
   ///* Weights of sigma points
   VectorXd weights_;
-
-  ///* State dimension
-  int n_x_;
-
-  ///* Augmented state dimension
-  int n_aug_;
 
   ///* Sigma point spreading parameter
   double lambda_;
