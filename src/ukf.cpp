@@ -7,7 +7,7 @@
 #define N_STATES (5)
 #define N_AUG_STATES (7)
 #define N_RADAR (3)
-#define N_LIDAR (3)
+#define N_LIDAR (2)
 #define N_SIGMA_POINTS (2 * N_AUG_STATES + 1)
 
 using namespace std;
@@ -25,10 +25,10 @@ UKF::UKF() {
   is_psidot_initialized_ = false;
 
   // if this is false, laser measurements will be ignored (except during init)
-  use_laser_ = false;
+  use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = true;
+  use_radar_ = false;
 
   // initial state vector
   x_ = VectorXd::Zero(N_STATES);
@@ -134,7 +134,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
     is_x_initialized_ = true;
 
     // done initializing, no need to predict or update
-    cout << x_;
+    cout << x_ << "\n";
     return;
     
   }
@@ -145,14 +145,24 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
 
   //process  measurement 
   if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
-    //TODO skip if using_radar is false
-    cout << "Processing Radar Measurement...\n";
-    UpdateRadar(meas_package);
-    cout << "Done\n";
+    if (use_radar_){
+      cout << "Processing Radar Measurement...\n";
+      UpdateRadar(meas_package);
+    }
+    else{
+      cout <<"Skipping Radar...\n";
+    }
   }
   else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
-    //TODO skip if using_ladar is false
-    cout << "Skipping Laser Measurement...\n";
+    if(use_laser_){
+      cout << "Processing Laser Measurement...\n";
+      cout << "\n" << meas_package.raw_measurements_ << "\n\n";
+      UpdateLidar(meas_package);
+    }
+    else{
+      cout << "Skipping Laser\n...";
+    }
+    
   }
   cout <<x_ << "\n";
 
@@ -237,7 +247,6 @@ void UKF::Prediction(double delta_t) {
       Xsig_pred_.col(i)(3) = Xsig_pred_.col(i)(3) + pnt(4)*delta_t;
       // Xsig_pred_.col(i)(3) = tools.wrapPi(Xsig_pred_.col(i)(3));
   }
-  cout <<Xsig_pred_  << "\n";
 
 
 /*******************************************************************************
@@ -274,13 +283,82 @@ void UKF::Prediction(double delta_t) {
  */
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
   /**
-  TODO:
-
+  /**
   Complete this function! Use lidar data to update the belief about the object's
-  position. Modify the state vector, x_, and covariance, P_.
-
+  position.
   You'll also need to calculate the lidar NIS.
   */
+  
+
+  //create matrix for sigma points in measurement space
+  MatrixXd Zsig = MatrixXd(N_LIDAR, N_SIGMA_POINTS);
+
+  //mean predicted measurement
+  VectorXd z_pred = VectorXd(N_LIDAR);
+  
+  //measurement covariance matrix S
+  MatrixXd S = MatrixXd(N_LIDAR,N_LIDAR);
+
+  //transform sigma points into measurement space
+  for (int i=0; i<N_SIGMA_POINTS; i++){
+      // breakout state for code clarity
+      double px = Xsig_pred_.col(i)(0);
+      double py =  Xsig_pred_.col(i)(1);
+      //set predicted measurements
+      Zsig.col(i) << px,
+                     py;
+  }
+  
+  //calculate mean predicted measurement
+  z_pred.fill(0.0);
+  for (int i = 0; i < N_SIGMA_POINTS; i++) {  //iterate over sigma points
+    z_pred += weights_(i) * Zsig.col(i);
+  }
+
+  //predicted measurement covariance matrix S
+  S.fill(0.0);
+  for (int i = 0; i < N_SIGMA_POINTS; i++) {  //iterate over sigma points
+    // state difference
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    S +=weights_(i) * z_diff * z_diff.transpose() ;
+  }
+  S(0,0)+=pow(std_laspx_,2);
+  S(1,1)+=pow(std_laspy_,2);
+/*******************************************************************************
+ * Compute Kalman Gain and update state and covaraince
+ ******************************************************************************/
+ //create matrix for cross correlation Tc
+  MatrixXd Tc = MatrixXd(N_STATES, N_LIDAR);
+  Tc.fill(0.0);
+  //calculate cross correlation matrix
+  for (int i = 0; i < N_SIGMA_POINTS; i++) { 
+    //measurement difference
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+
+    //state difference
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    x_diff(3) = tools.wrapPi(x_diff(3));
+
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+  }
+
+  //calculate Kalman gain K;
+  MatrixXd K = Tc*S.inverse();
+  
+  //update state mean and covariance matrix
+  VectorXd Innovation = meas_package.raw_measurements_ - z_pred;
+
+  x_ += K*Innovation;
+  x_(3) = tools.wrapPi(x_(3));
+
+  P_ += -K*S*K.transpose();
+
+  VectorXd NIS_laser_vector = Innovation.transpose()*S*Innovation;
+
+  NIS_laser_  = NIS_laser_vector(0);
+  // cout << x_;
+
 }
 
 /**
