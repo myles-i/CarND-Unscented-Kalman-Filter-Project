@@ -19,9 +19,7 @@ public:
   // previous timestamp
   long previous_timestamp_;
   ///* initially set to false, set to true in first call of ProcessMeasurement
-  bool is_x_initialized_;
-  bool is_psi_initialized_;
-  bool is_psidot_initialized_;
+  bool is_initialized_;
 
   ///* if this is false, laser measurements will be ignored (except for init)
   bool use_laser_;

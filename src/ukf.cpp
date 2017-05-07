@@ -20,15 +20,13 @@ using std::vector;
  */
 UKF::UKF() {
   //states not initialized
-  is_x_initialized_ = false;
-  is_psi_initialized_ = false;
-  is_psidot_initialized_ = false;
+  is_initialized_ = false;
 
   // if this is false, laser measurements will be ignored (except during init)
   use_laser_ = true;
 
   // if this is false, radar measurements will be ignored (except during init)
-  use_radar_ = false;
+  use_radar_ = true;
 
   // initial state vector
   x_ = VectorXd::Zero(N_STATES);
@@ -37,12 +35,12 @@ UKF::UKF() {
   P_ = MatrixXd::Identity(N_STATES, N_STATES);
 
   // Process noise standard deviation longitudinal acceleration in m/s^2
-  std_a_ = 0.1;
+  std_a_ = 0.25;
 
   // Process noise standard deviation yaw acceleration in rad/s^2
-  std_yawdd_ = M_PI/6;
+  std_yawdd_ = 0.1*M_PI;
   // Laser measurement noise standard deviation position1 in m
-  std_laspx_ = 0.15;
+  std_laspx_ = 0.05;
 
   // Laser measurement noise standard deviation position2 in m
   std_laspy_ = 0.15;
@@ -55,6 +53,13 @@ UKF::UKF() {
 
   // Radar measurement noise standard deviation radius change in m/s
   std_radrd_ = 0.3;
+
+  // initial covariance matrix
+  P_ << std_radr_, 0, 0, 0, 0,
+        0, std_radr_, 0, 0, 0,
+        0, 0, 2*std_radr_, 0, 0, 
+        0, 0, 0, 2*M_PI, 0,
+        0, 0, 0, 0, 5*M_PI*M_PI;
 
   //initialize weights
   weights_ = VectorXd(2*N_STATES + 1); 
@@ -86,7 +91,7 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   double dt = (meas_package.timestamp_ - previous_timestamp_) / 1000000.0;  //dt - expressed in seconds
   previous_timestamp_ = meas_package.timestamp_;
 
-  if (!is_psidot_initialized_) {
+  if (!is_initialized_) {
     /**
     TODO:
       * Initialize the state x_ with the first measurement.
@@ -116,25 +121,10 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
       x_(1)=0.001;
     }
 
-    //Initialize velocity and psi if position was already initialized
-    double vx, vy, v, psi;
-    if (is_x_initialized_){
-      vx = (x_(0) - x_previous(0))/dt;
-      vy = (x_(1) - x_previous(0))/dt;
-      x_(2) = sqrt(vx*vx + vy*vy); //v
-      x_(3) = atan2(vy,vx); //psi
-
-      //Initialize psidot if psi already initialized
-      // if(is_psi_initialized_){
-        // x_(4) = (x_(3) - x_previous(3))/dt; //psidot
-        is_psidot_initialized_ = true;
-      // }
-      is_psi_initialized_ = true;
-    }
-    is_x_initialized_ = true;
+    is_initialized_ = true;
 
     // done initializing, no need to predict or update
-    cout << x_ << "\n";
+    // cout << x_ << "\n";
     return;
     
   }
@@ -146,25 +136,24 @@ void UKF::ProcessMeasurement(MeasurementPackage meas_package) {
   //process  measurement 
   if (meas_package.sensor_type_ == MeasurementPackage::RADAR) {
     if (use_radar_){
-      cout << "Processing Radar Measurement...\n";
+      // cout << "Processing Radar Measurement...\n";
       UpdateRadar(meas_package);
     }
     else{
-      cout <<"Skipping Radar...\n";
+      // cout <<"Skipping Radar...\n";
     }
   }
   else if (meas_package.sensor_type_ == MeasurementPackage::LASER) {
     if(use_laser_){
-      cout << "Processing Laser Measurement...\n";
-      cout << "\n" << meas_package.raw_measurements_ << "\n\n";
+      // cout << "Processing Laser Measurement...\n";
       UpdateLidar(meas_package);
     }
     else{
-      cout << "Skipping Laser\n...";
+      // cout << "Skipping Laser\n...";
     }
     
   }
-  cout <<x_ << "\n";
+  // cout <<x_ <<f "\n";
 
 }
 
@@ -344,7 +333,8 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
   }
 
   //calculate Kalman gain K;
-  MatrixXd K = Tc*S.inverse();
+  MatrixXd S_inv = S.inverse();
+  MatrixXd K = Tc*S_inv;
   
   //update state mean and covariance matrix
   VectorXd Innovation = meas_package.raw_measurements_ - z_pred;
@@ -354,7 +344,7 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
 
   P_ += -K*S*K.transpose();
 
-  VectorXd NIS_laser_vector = Innovation.transpose()*S*Innovation;
+  VectorXd NIS_laser_vector = Innovation.transpose()*S_inv*Innovation;
 
   NIS_laser_  = NIS_laser_vector(0);
   // cout << x_;
@@ -441,7 +431,8 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
   }
 
   //calculate Kalman gain K;
-  MatrixXd K = Tc*S.inverse();
+  MatrixXd S_inv = S.inverse();
+  MatrixXd K = Tc*S_inv;
   
   //update state mean and covariance matrix
   VectorXd Innovation = meas_package.raw_measurements_ - z_pred;
@@ -451,7 +442,7 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
 
   P_ += -K*S*K.transpose();
 
-  VectorXd NIS_radar_vector = Innovation.transpose()*S*Innovation;
+  VectorXd NIS_radar_vector = Innovation.transpose()*S_inv*Innovation;
 
   NIS_radar_ = NIS_radar_vector(0);
   // cout << x_;
